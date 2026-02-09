@@ -117,8 +117,9 @@ class CheckIssuesCommand extends Command
             $this->io->text("<info>Suggested Comment:</info>");
             $comment = $suggestion['suggested_comment'];
             // Add that it was auto-generated.
-            $comment .= "\n------------------\n<em>(This comment was AI generated and humanly reviewed using the <a href=\"https://github.com/ivanboring/drupal-issue-hygiene-helper\">Drupal Issue Hygiene Helper</a>. Please do not credit this comment and give feedback in the issue queue if the suggestion is helpful or not.)</em>";
-            $this->io->block($suggestion['suggested_comment'], null, 'fg=cyan', '  | ');
+            $comment .= "\n\n------------------\n\n<em>(This comment was AI generated and humanly reviewed using the <a href=\"https://github.com/ivanboring/drupal-issue-hygiene-helper\">Drupal Issue Hygiene Helper</a>.";
+            $comment .= " Please do not credit this comment and give feedback in the Github issue queue if the suggestion was not helpful.)</em>";
+            $this->io->block($comment, null, 'fg=cyan');
         }
 
         $this->io->newLine();
