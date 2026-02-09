@@ -313,8 +313,14 @@ class DrupalApiService
     {
         $comments = [];
 
-        // Pattern: Find all comment divs with id="comment-{id}"
-        if (preg_match_all('/<div[^>]*id="comment-(\d+)"[^>]*class="[^"]*comment[^"]*"[^>]*>(.*?)(?=<div[^>]*id="comment-\d+"|<section[^>]*id="comments"|$)/si', $html, $matches, PREG_SET_ORDER)) {
+        // First, find the comments section
+        $commentsSection = $html;
+        if (preg_match('/<section[^>]*id="comments"[^>]*>(.*?)<\/section>/si', $html, $sectionMatch)) {
+            $commentsSection = $sectionMatch[1];
+        }
+
+        // Pattern 1: Find comment divs by id="comment-{id}" - capture until next comment or end of section
+        if (preg_match_all('/<div[^>]*id="comment-(\d+)"[^>]*>(.*?)(?=<div[^>]*id="comment-\d+"|<\/section|$)/si', $commentsSection, $matches, PREG_SET_ORDER)) {
             foreach ($matches as $match) {
                 $commentId = $match[1];
                 $commentHtml = $match[2];
@@ -325,9 +331,23 @@ class DrupalApiService
             }
         }
 
-        // Alternative pattern if above didn't work
+        // Pattern 2: Alternative - class before id
         if (empty($comments)) {
-            if (preg_match_all('/<div[^>]*class="[^"]*comment[^"]*"[^>]*id="comment-(\d+)"[^>]*>(.*?)(?=<div[^>]*class="[^"]*comment[^"]*"|<\/section|$)/si', $html, $matches, PREG_SET_ORDER)) {
+            if (preg_match_all('/<div[^>]*class="[^"]*comment[^"]*"[^>]*id="comment-(\d+)"[^>]*>(.*?)(?=<div[^>]*class="[^"]*comment[^"]*"[^>]*id="comment-|<\/section|$)/si', $commentsSection, $matches, PREG_SET_ORDER)) {
+                foreach ($matches as $match) {
+                    $commentId = $match[1];
+                    $commentHtml = $match[2];
+                    $comment = $this->parseScrapedComment($commentId, $commentHtml);
+                    if ($comment) {
+                        $comments[] = $comment;
+                    }
+                }
+            }
+        }
+
+        // Pattern 3: article elements (some Drupal themes use article for comments)
+        if (empty($comments)) {
+            if (preg_match_all('/<article[^>]*id="comment-(\d+)"[^>]*>(.*?)<\/article>/si', $commentsSection, $matches, PREG_SET_ORDER)) {
                 foreach ($matches as $match) {
                     $commentId = $match[1];
                     $commentHtml = $match[2];
@@ -366,18 +386,57 @@ class DrupalApiService
             $comment['date'] = $dateMatch[1];
         }
 
-        // Extract comment body content
-        if (preg_match('/<div[^>]*class="[^"]*field-name-comment-body[^"]*"[^>]*>.*?<div[^>]*class="field-item[^"]*"[^>]*>(.*?)<\/div>/si', $html, $bodyMatch)) {
-            $comment['content'] = $this->cleanHtmlContent($bodyMatch[1]);
+        // Extract comment body content - try multiple patterns
+        $bodyContent = '';
+
+        // Pattern 1: field-name-comment-body with field-item
+        if (preg_match('/<div[^>]*class="[^"]*field-name-comment-body[^"]*"[^>]*>.*?<div[^>]*class="[^"]*field-item[^"]*"[^>]*>(.*?)<\/div>/si', $html, $bodyMatch)) {
+            $bodyContent = $this->cleanHtmlContent($bodyMatch[1]);
         }
 
+        // Pattern 2: field--name-comment-body (Drupal 8+ style)
+        if (empty($bodyContent) && preg_match('/<div[^>]*class="[^"]*field--name-comment-body[^"]*"[^>]*>(.*?)<\/div>\s*<\/div>/si', $html, $bodyMatch)) {
+            $bodyContent = $this->cleanHtmlContent($bodyMatch[1]);
+        }
+
+        // Pattern 3: comment-body class directly
+        if (empty($bodyContent) && preg_match('/<div[^>]*class="[^"]*comment-body[^"]*"[^>]*>(.*?)<\/div>/si', $html, $bodyMatch)) {
+            $bodyContent = $this->cleanHtmlContent($bodyMatch[1]);
+        }
+
+        // Pattern 4: Look for text-formatted content
+        if (empty($bodyContent) && preg_match('/<div[^>]*class="[^"]*text-formatted[^"]*"[^>]*>(.*?)<\/div>/si', $html, $bodyMatch)) {
+            $bodyContent = $this->cleanHtmlContent($bodyMatch[1]);
+        }
+
+        // Pattern 5: Look for any p tags within content area
+        if (empty($bodyContent) && preg_match('/<div[^>]*class="[^"]*content[^"]*"[^>]*>.*?(<p[^>]*>.*?<\/p>)/si', $html, $bodyMatch)) {
+            $bodyContent = $this->cleanHtmlContent($bodyMatch[1]);
+        }
+
+        // Pattern 6: clearfix field-item with text content
+        if (empty($bodyContent) && preg_match('/<div[^>]*class="[^"]*clearfix[^"]*text-formatted[^"]*"[^>]*>(.*?)<\/div>/si', $html, $bodyMatch)) {
+            $bodyContent = $this->cleanHtmlContent($bodyMatch[1]);
+        }
+
+        $comment['content'] = $bodyContent;
+
         // Extract issue changes (metadata changes like status, tags, etc.)
+        $changes = [];
+
+        // Pattern 1: field-name-field-issue-changes
         if (preg_match('/<div[^>]*class="[^"]*field-name-field-issue-changes[^"]*"[^>]*>(.*?)<\/div>\s*<\/div>/si', $html, $changesMatch)) {
             $changes = $this->extractIssueChanges($changesMatch[1]);
-            if (!empty($changes)) {
-                $changesText = '[Issue changes: ' . implode(', ', $changes) . ']';
-                $comment['content'] = trim($comment['content'] . "\n" . $changesText);
-            }
+        }
+
+        // Pattern 2: nodechanges table directly
+        if (empty($changes) && preg_match('/<table[^>]*class="[^"]*nodechanges[^"]*"[^>]*>(.*?)<\/table>/si', $html, $changesMatch)) {
+            $changes = $this->extractIssueChanges($changesMatch[1]);
+        }
+
+        if (!empty($changes)) {
+            $changesText = '[Issue changes: ' . implode(', ', $changes) . ']';
+            $comment['content'] = trim($comment['content'] . "\n" . $changesText);
         }
 
         // Check for status change

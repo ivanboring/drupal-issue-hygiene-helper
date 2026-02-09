@@ -158,6 +158,7 @@ class GiveSuggestionsCommand extends Command
 
         // Filter out issues with pending suggestions or already checked
         foreach ($allIssues as $issueId => $content) {
+            $issueId = (string) $issueId; // PHP converts numeric string keys to int
             // Check if already has a pending suggestion
             $existingSuggestion = $this->stateHandler->getIssueSuggestion($projectId, $issueId);
             if ($existingSuggestion !== null) {

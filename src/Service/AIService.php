@@ -50,7 +50,6 @@ class AIService
                     'json' => [
                         'model' => 'gpt-5.1',
                         'temperature' => 0.3,
-                        'max_tokens' => 2000,
                         'messages' => [
                             ['role' => 'system', 'content' => $this->getSystemPrompt()],
                             ['role' => 'user', 'content' => $prompt],
@@ -139,6 +138,8 @@ For the issues of giving reasoning, be very leniant since sometimes the reasonin
 Only suggest a change if there is absolutely no reasoning provided.
 
 When you are giving comments, could you make sure that you target people that speficially asked for something, with an @ sign.
+
+For issues that have discuss or meta in their title, always set has_problem to false, since these are meant for discussion and often don't have a clear problem or solution.
 
 When suggesting a status change, use these mappings:
 

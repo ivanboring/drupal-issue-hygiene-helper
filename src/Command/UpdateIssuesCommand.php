@@ -32,6 +32,7 @@ class UpdateIssuesCommand extends Command
             ->addOption('limit', 'l', InputOption::VALUE_OPTIONAL, 'Limit number of issues to fetch')
             ->addOption('all', 'a', InputOption::VALUE_NONE, 'Fetch all issues (ignore last checked timestamp)')
             ->addOption('no-scrape', null, InputOption::VALUE_NONE, 'Skip scraping issue pages for MR/CI status')
+            ->addOption('debug-html', null, InputOption::VALUE_NONE, 'Save scraped HTML to state/debug/ for inspection')
             ->addOption('give-suggestions', 's', InputOption::VALUE_NONE, 'Also run suggestions after updating');
     }
 
@@ -156,8 +157,18 @@ class UpdateIssuesCommand extends Command
                 $io->progressAdvance(0);
                 $io->write(" <comment>[Scraping #$issueId]</comment>");
 
+                // Debug HTML path if requested
+                $debugHtmlPath = null;
+                if ($input->getOption('debug-html')) {
+                    $debugDir = dirname(__DIR__, 2) . '/state/debug';
+                    if (!is_dir($debugDir)) {
+                        mkdir($debugDir, 0755, true);
+                    }
+                    $debugHtmlPath = $debugDir . '/' . $issueId . '.html';
+                }
+
                 try {
-                    $scrapedData = $this->apiService->scrapeIssuePage($issueId);
+                    $scrapedData = $this->apiService->scrapeIssuePage($issueId, $debugHtmlPath);
                     if ($scrapedData) {
                         $issueData['has_merge_request'] = $scrapedData['has_merge_request'] ?? false;
                         $issueData['has_patch'] = $scrapedData['has_patch'] ?? false;
@@ -170,7 +181,7 @@ class UpdateIssuesCommand extends Command
 
                 // Scrape all comments from the page
                 try {
-                    $scrapedComments = $this->apiService->scrapeAllCommentsFromPage($issueId);
+                    $scrapedComments = $this->apiService->scrapeAllCommentsFromPage($issueId, $debugHtmlPath);
                     $issueData['comments'] = $scrapedComments;
                 } catch (\Exception $e) {
                     $issueData['comments'] = [];

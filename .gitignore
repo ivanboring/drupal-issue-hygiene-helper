@@ -4,3 +4,6 @@ vendor/
 # State files (project-specific data)
 state/*
 !state/.gitkeep
+
+# Debug HTML files
+state/debug/
