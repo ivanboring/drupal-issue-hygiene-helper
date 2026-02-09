@@ -143,16 +143,33 @@ Interactive UI to review pending suggestions:
 - Options: `--project`
 
 ## AI
-The project uses OpenAI API directly via Guzzle HTTP client (not Symfony AI, which had compatibility issues).
+The project uses Symfony AI Platform component for OpenAI integration.
 
 Configuration:
-- Model: `gpt-4o-mini`
+- Model: `gpt-5.2`
 - Temperature: 0.3 (conservative)
-- Max tokens: 1000
+
+```php
+use Symfony\AI\Platform\Bridge\OpenAi\PlatformFactory;
+use Symfony\AI\Platform\Message\Message;
+use Symfony\AI\Platform\Message\MessageBag;
+
+$platform = PlatformFactory::create($apiKey);
+
+$messages = new MessageBag(
+    Message::forSystem($systemPrompt),
+    Message::ofUser($userPrompt),
+);
+
+$result = $platform->invoke('gpt-4o-mini', $messages, [
+    'temperature' => 0.3,
+    'max_output_tokens' => 1000,
+]);
+
+$content = $result->asText();
+```
 
 The AI is only used where needed. Simple checks (MR without review status, failing CI, stale issues) are done without AI. AI is used for semantic analysis like checking if bug reports are detailed enough or if discussions were resolved.
-
-API calls include retry logic (3 retries, 5-second delay) for rate limiting.
 
 ## State handling
 The project uses a simple state handling system with JSON files:

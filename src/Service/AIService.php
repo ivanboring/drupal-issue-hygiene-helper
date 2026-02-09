@@ -4,32 +4,28 @@ declare(strict_types=1);
 
 namespace DrupalIssueHelper\Service;
 
-use GuzzleHttp\Client;
-use GuzzleHttp\Exception\GuzzleException;
-use GuzzleHttp\Exception\ClientException;
+use Symfony\AI\Platform\Bridge\OpenAi\PlatformFactory;
+use Symfony\AI\Platform\Message\Message;
+use Symfony\AI\Platform\Message\MessageBag;
+use Symfony\AI\Platform\PlatformInterface;
 
 class AIService
 {
-    private ?Client $httpClient = null;
+    private ?PlatformInterface $platform = null;
     private string $apiKey = '';
-    private int $maxRetries = 3;
-    private int $retryDelay = 5;
 
     public function __construct()
     {
         $this->apiKey = $_ENV['OPENAI_API_KEY'] ?? getenv('OPENAI_API_KEY') ?: '';
 
         if (!empty($this->apiKey)) {
-            $this->httpClient = new Client([
-                'base_uri' => 'https://api.openai.com/',
-                'timeout' => 60,
-            ]);
+            $this->platform = PlatformFactory::create($this->apiKey);
         }
     }
 
     public function isAvailable(): bool
     {
-        return $this->httpClient !== null && !empty($this->apiKey);
+        return $this->platform !== null && !empty($this->apiKey);
     }
 
     public function analyzeIssue(array $issue, array $checksToPerform): ?array
@@ -41,65 +37,22 @@ class AIService
         $prompt = $this->buildAnalysisPrompt($issue, $checksToPerform);
 
         try {
-            $content = $this->retryRequest(function () use ($prompt) {
-                $response = $this->httpClient->post('v1/chat/completions', [
-                    'headers' => [
-                        'Authorization' => 'Bearer ' . $this->apiKey,
-                        'Content-Type' => 'application/json',
-                    ],
-                    'json' => [
-                        'model' => 'gpt-5.1',
-                        'temperature' => 0.3,
-                        'messages' => [
-                            ['role' => 'system', 'content' => $this->getSystemPrompt()],
-                            ['role' => 'user', 'content' => $prompt],
-                        ],
-                    ],
-                ]);
+            $messages = new MessageBag(
+                Message::forSystem($this->getSystemPrompt()),
+                Message::ofUser($prompt),
+            );
 
-                $data = json_decode($response->getBody()->getContents(), true);
-                return $data['choices'][0]['message']['content'] ?? '';
-            });
+            $result = $this->platform->invoke('gpt-5.2', $messages, [
+                'temperature' => 0.3,
+            ]);
+
+            $content = $result->asText();
 
             return $this->parseAIResponse($issue, $content);
-        } catch (\RuntimeException $e) {
+        } catch (\Exception $e) {
+            // Log error if needed, return null to indicate failure
             return null;
         }
-    }
-
-    private function retryRequest(callable $request): mixed
-    {
-        $lastException = null;
-
-        for ($attempt = 1; $attempt <= $this->maxRetries; $attempt++) {
-            try {
-                return $request();
-            } catch (ClientException $e) {
-                $statusCode = $e->getResponse()->getStatusCode();
-
-                // Retry on 429 (Too Many Requests) or 503 (Service Unavailable)
-                if (in_array($statusCode, [429, 503])) {
-                    $lastException = $e;
-
-                    if ($attempt < $this->maxRetries) {
-                        sleep($this->retryDelay);
-                        continue;
-                    }
-                }
-
-                throw $e;
-            } catch (GuzzleException $e) {
-                $lastException = $e;
-
-                // Retry on connection errors
-                if ($attempt < $this->maxRetries) {
-                    sleep($this->retryDelay);
-                    continue;
-                }
-            }
-        }
-
-        throw new \RuntimeException('AI request failed: ' . ($lastException ? $lastException->getMessage() : 'Unknown error'));
     }
 
     private const STATUS_NAMES = [
