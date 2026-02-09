@@ -1,0 +1,25 @@
+{
+    "name": "ivanboring/drupal-issue-hygiene-helper",
+    "description": "This helps giving suggestions on improvements that needs to happen in the issue queue.",
+    "type": "script",
+    "authors": [
+        {
+            "name": "Marcus Johansson",
+            "email": "me@marcusmailbox.com"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "chrome-php/chrome": "^1.15",
+        "symfony/console": "^7.4",
+        "symfony/ai-platform": "^0.3.0",
+        "symfony/ai-open-ai-platform": "^0.3.0",
+        "vlucas/phpdotenv": "^5.6",
+        "guzzlehttp/guzzle": "^7.9"
+    },
+    "autoload": {
+        "psr-4": {
+            "DrupalIssueHelper\\": "src/"
+        }
+    }
+}

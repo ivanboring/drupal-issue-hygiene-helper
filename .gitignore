@@ -1,0 +1,6 @@
+vendor/
+.env
+
+# State files (project-specific data)
+state/*
+!state/.gitkeep
