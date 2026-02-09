@@ -49,4 +49,4 @@ php issue.php check-issues --project=AI         # Review pending suggestions
 - OpenAI API key (for AI-based checks)
 
 ## Note
-** This whole tool is vibe-coded. Since it doesn't write directly to Drupal.org, it is safe to run and test without fear of causing harm. However, please be mindful of API usage and respect Drupal.org's guidelines when implementing suggestions.
+**This whole tool is vibe-coded. Since it doesn't write directly to Drupal.org, it is safe to run and test without fear of causing harm. However, please be mindful of API usage and respect Drupal.org's guidelines when implementing suggestions.**
